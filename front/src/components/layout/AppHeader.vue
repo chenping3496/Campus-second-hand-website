@@ -60,6 +60,9 @@
       <nav class="nav-links">
         <router-link to="/" class="nav-link">首页</router-link>
         <template v-if="auth.isLoggedIn">
+          <router-link v-if="needsVerification" to="/verification" class="nav-link verify-warn">
+            ⚠️ 请认证
+          </router-link>
           <router-link to="/chat" class="nav-link">
             消息
             <span v-if="unreadChatCount" class="badge">{{ unreadChatCount > 99 ? '99+' : unreadChatCount }}</span>
@@ -80,6 +83,7 @@
               <router-link to="/my-products" class="dropdown-item" @click="showUserMenu = false">我的发布</router-link>
               <router-link to="/favorites" class="dropdown-item" @click="showUserMenu = false">我的收藏</router-link>
               <router-link to="/orders" class="dropdown-item" @click="showUserMenu = false">我的订单</router-link>
+              <router-link to="/complaints" class="dropdown-item" @click="showUserMenu = false">我的投诉</router-link>
               <div class="dropdown-divider"></div>
               <a class="dropdown-item logout" @click="handleLogout">退出登录</a>
             </div>
@@ -116,6 +120,7 @@
           <router-link to="/my-products" class="mobile-link" @click="showMobileMenu = false">我的发布</router-link>
           <router-link to="/favorites" class="mobile-link" @click="showMobileMenu = false">我的收藏</router-link>
           <router-link to="/orders" class="mobile-link" @click="showMobileMenu = false">我的订单</router-link>
+          <router-link to="/complaints" class="mobile-link" @click="showMobileMenu = false">我的投诉</router-link>
           <a class="mobile-link logout" @click="handleLogout">退出登录</a>
         </template>
         <template v-else>
@@ -133,6 +138,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { getUnreadCount as getChatUnread } from '@/api/chat'
 import { getUnreadNotificationCount } from '@/api/notification'
+import { getVerificationStatus } from '@/api/verification'
 
 const router = useRouter()
 const route = useRoute()
@@ -144,6 +150,12 @@ const showMobileMenu = ref(false)
 const userMenuRef = ref(null)
 const unreadChatCount = ref(0)
 const unreadNotifCount = ref(0)
+const verificationStatus = ref('')
+
+const needsVerification = computed(() => {
+  return auth.isLoggedIn && !auth.isAdmin && verificationStatus.value &&
+    verificationStatus.value !== 'APPROVED'
+})
 
 const showSearch = computed(() => {
   return route.name !== 'Home'
@@ -176,12 +188,14 @@ function handleLogout() {
 async function fetchUnreadCounts() {
   if (auth.isLoggedIn && !auth.isAdmin) {
     try {
-      const [chatCount, notifCount] = await Promise.all([
+      const [chatCount, notifCount, verifyStatus] = await Promise.all([
         getChatUnread(),
-        getUnreadNotificationCount()
+        getUnreadNotificationCount(),
+        getVerificationStatus()
       ])
       unreadChatCount.value = chatCount
       unreadNotifCount.value = notifCount
+      verificationStatus.value = verifyStatus.verificationStatus
     } catch { /* ignore */ }
   }
 }
@@ -431,6 +445,17 @@ onMounted(() => {
   height: 1px;
   background: var(--border-light);
   margin: 4px 0;
+}
+
+.verify-warn {
+  color: #E65100 !important;
+  font-weight: 600;
+  animation: blink 1.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .publish-btn {

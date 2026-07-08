@@ -84,6 +84,18 @@ const routes = [
     meta: { requiresAuth: true }
   },
   {
+    path: '/verification',
+    name: 'Verification',
+    component: () => import('@/views/Verification.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
+    path: '/complaints',
+    name: 'Complaints',
+    component: () => import('@/views/Complaints.vue'),
+    meta: { requiresAuth: true }
+  },
+  {
     path: '/admin',
     name: 'AdminDashboard',
     component: () => import('@/views/admin/Dashboard.vue'),
@@ -114,6 +126,18 @@ const routes = [
     meta: { requiresAuth: true, requiresAdmin: true }
   },
   {
+    path: '/admin/verifications',
+    name: 'AdminVerifications',
+    component: () => import('@/views/admin/VerificationManagement.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
+    path: '/admin/complaints',
+    name: 'AdminComplaints',
+    component: () => import('@/views/admin/ComplaintManagement.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true }
+  },
+  {
     path: '/:pathMatch(.*)*',
     name: 'NotFound',
     component: () => import('@/views/NotFound.vue')
@@ -128,7 +152,8 @@ const router = createRouter({
   }
 })
 
-const adminRouteNames = ['AdminDashboard', 'AdminUsers', 'AdminProducts', 'AdminCategories', 'AdminOrders']
+const adminRouteNames = ['AdminDashboard', 'AdminUsers', 'AdminProducts', 'AdminCategories', 'AdminOrders', 'AdminVerifications', 'AdminComplaints']
+const adminDefaultRoute = 'AdminUsers'
 const publicRouteNames = ['Login', 'Register', 'NotFound']
 
 router.beforeEach((to, from, next) => {
@@ -148,7 +173,7 @@ router.beforeEach((to, from, next) => {
 
   // Admin users can only access admin pages and public pages
   if (isAdmin && token && !adminRouteNames.includes(to.name) && !publicRouteNames.includes(to.name)) {
-    next({ name: 'AdminDashboard' })
+    next({ name: adminDefaultRoute })
     return
   }
 

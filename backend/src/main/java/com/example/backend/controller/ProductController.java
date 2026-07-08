@@ -11,11 +11,26 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/products")
 @Tag(name = "商品", description = "商品浏览、发布、管理接口")
 public class ProductController {
+
+    @GetMapping("/tags/periods")
+    @Operation(summary = "获取商品标签开放时间段")
+    public Result<Map<String, Object>> getTagPeriods() {
+        return Result.success(Map.of(
+            "URGENT_SCHOOL", Map.of("name", "开学急用", "startMonth", 8, "endMonth", 10, "active", isTagActive(8, 10)),
+            "URGENT_GRADUATION", Map.of("name", "毕业急出", "startMonth", 5, "endMonth", 7, "active", isTagActive(5, 7))
+        ));
+    }
+
+    private boolean isTagActive(int startMonth, int endMonth) {
+        int currentMonth = java.time.LocalDate.now().getMonthValue();
+        return currentMonth >= startMonth && currentMonth <= endMonth;
+    }
 
     @Autowired
     private ProductService productService;
@@ -37,11 +52,12 @@ public class ProductController {
             @Parameter(description = "分类ID") @RequestParam(required = false) Long categoryId,
             @Parameter(description = "最低价格") @RequestParam(required = false) BigDecimal minPrice,
             @Parameter(description = "最高价格") @RequestParam(required = false) BigDecimal maxPrice,
+            @Parameter(description = "商品标签") @RequestParam(required = false) String productTag,
             @Parameter(description = "页码") @RequestParam(defaultValue = "0") int page,
             @Parameter(description = "每页条数") @RequestParam(defaultValue = "10") int size,
             @Parameter(description = "排序字段") @RequestParam(defaultValue = "createdAt") String sortBy,
             @Parameter(description = "排序方向") @RequestParam(defaultValue = "desc") String sortDir) {
-        return Result.success(productService.searchProducts(keyword, categoryId, minPrice, maxPrice, page, size, sortBy, sortDir));
+        return Result.success(productService.searchProducts(keyword, categoryId, minPrice, maxPrice, productTag, page, size, sortBy, sortDir));
     }
 
     @GetMapping("/detail/{id}")

@@ -74,7 +74,7 @@ async function handleLogin() {
     await auth.login({ username: form.username, password: form.password })
     window.$toast?.success('登录成功')
     const userInfo = JSON.parse(localStorage.getItem('userInfo') || 'null')
-    const redirect = userInfo?.role === 'ADMIN' ? '/admin' : (route.query.redirect || '/')
+    const redirect = userInfo?.role === 'ADMIN' ? '/admin/users' : (route.query.redirect || '/')
     router.push(redirect)
   } catch (err) {
     window.$toast?.error(err.message || '登录失败')

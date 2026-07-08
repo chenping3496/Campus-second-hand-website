@@ -39,7 +39,7 @@ public class RedisConfig {
         return template;
     }
 
-    private GenericJackson2JsonRedisSerializer createJsonSerializer() {
+    private GenericJackson2JsonRedisSerializer createTypedJsonSerializer() {
         ObjectMapper mapper = new ObjectMapper();
         mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
         mapper.activateDefaultTyping(LaissezFaireSubTypeValidator.instance, ObjectMapper.DefaultTyping.NON_FINAL);
@@ -47,9 +47,21 @@ public class RedisConfig {
         return new GenericJackson2JsonRedisSerializer(mapper);
     }
 
+    private GenericJackson2JsonRedisSerializer createPlainJsonSerializer() {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setVisibility(PropertyAccessor.ALL, JsonAutoDetect.Visibility.ANY);
+        mapper.registerModule(new JavaTimeModule());
+        return new GenericJackson2JsonRedisSerializer(mapper);
+    }
+
+    private GenericJackson2JsonRedisSerializer createJsonSerializer() {
+        // Use typed serializer for backwards-compatible RedisTemplate use
+        return createTypedJsonSerializer();
+    }
+
     @Bean
     public CacheManager cacheManager(RedisConnectionFactory factory) {
-        GenericJackson2JsonRedisSerializer jsonSerializer = createJsonSerializer();
+        GenericJackson2JsonRedisSerializer jsonSerializer = createPlainJsonSerializer();
         StringRedisSerializer stringSerializer = new StringRedisSerializer();
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()

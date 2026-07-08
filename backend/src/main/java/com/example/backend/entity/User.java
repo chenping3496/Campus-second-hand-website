@@ -32,17 +32,22 @@ public class User {
 
     private UserStatus status = UserStatus.ACTIVE;
 
+    // === Identity verification fields ===
+    private String realName;
+    private IdentityType identityType;
+    private String identityNumber;
+    private String idCardImage;
+    private VerificationStatus verificationStatus = VerificationStatus.UNVERIFIED;
+    private String verificationRemark;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 
     @TableField(fill = FieldFill.UPDATE)
     private LocalDateTime updatedAt;
 
-    public enum UserRole {
-        USER, ADMIN
-    }
-
-    public enum UserStatus {
-        ACTIVE, BANNED
-    }
+    public enum UserRole { USER, ADMIN }
+    public enum UserStatus { ACTIVE, BANNED }
+    public enum IdentityType { STUDENT, TEACHER }
+    public enum VerificationStatus { UNVERIFIED, PENDING, APPROVED, REJECTED, FROZEN }
 }

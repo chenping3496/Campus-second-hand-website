@@ -27,6 +27,8 @@ public class Product {
 
     private ProductStatus status = ProductStatus.PENDING;
 
+    private ProductTag productTag = ProductTag.NORMAL;
+
     private String rejectReason;
 
     private String images;
@@ -44,5 +46,9 @@ public class Product {
 
     public enum ProductStatus {
         PENDING, ON_SALE, SOLD, OFF_SHELF, REJECTED
+    }
+
+    public enum ProductTag {
+        NORMAL, URGENT_SCHOOL, URGENT_GRADUATION
     }
 }

@@ -29,6 +29,22 @@
             </div>
           </div>
           <div class="form-group">
+            <label>发布类型</label>
+            <div class="tag-options">
+              <label :class="['tag-option', { active: form.productTag === 'NORMAL' || !form.productTag }]" @click="form.productTag = 'NORMAL'">
+                📦 普通发布
+              </label>
+              <label :class="['tag-option', { active: form.productTag === 'URGENT_SCHOOL', disabled: !tagPeriods.URGENT_SCHOOL?.active }]" @click="selectTag('URGENT_SCHOOL')">
+                🎒 开学急用
+                <span v-if="!tagPeriods.URGENT_SCHOOL?.active" class="tag-disabled-hint">{{ tagPeriods.URGENT_SCHOOL?.startMonth }}-{{ tagPeriods.URGENT_SCHOOL?.endMonth }}月开放</span>
+              </label>
+              <label :class="['tag-option', { active: form.productTag === 'URGENT_GRADUATION', disabled: !tagPeriods.URGENT_GRADUATION?.active }]" @click="selectTag('URGENT_GRADUATION')">
+                🎓 毕业急出
+                <span v-if="!tagPeriods.URGENT_GRADUATION?.active" class="tag-disabled-hint">{{ tagPeriods.URGENT_GRADUATION?.startMonth }}-{{ tagPeriods.URGENT_GRADUATION?.endMonth }}月开放</span>
+              </label>
+            </div>
+          </div>
+          <div class="form-group">
             <label>商品描述</label>
             <textarea v-model="form.description" class="form-textarea" placeholder="描述一下商品的状态、使用情况等信息..." rows="5"></textarea>
           </div>
@@ -53,6 +69,7 @@ import { ref, reactive, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { createProduct, updateProduct, getProductDetail } from '@/api/product'
 import { getCategories } from '@/api/category'
+import request from '@/api/request'
 import ImageUpload from '@/components/common/ImageUpload.vue'
 
 const route = useRoute()
@@ -62,12 +79,18 @@ const isEdit = computed(() => !!route.params.id)
 const categories = ref([])
 const submitting = ref(false)
 
+const tagPeriods = ref({
+  URGENT_SCHOOL: { name: '开学急用', startMonth: 8, endMonth: 10, active: false },
+  URGENT_GRADUATION: { name: '毕业急出', startMonth: 5, endMonth: 7, active: false }
+})
+
 const form = reactive({
   title: '',
   categoryId: null,
   price: null,
   originalPrice: null,
   description: '',
+  productTag: 'NORMAL',
   images: []
 })
 
@@ -83,6 +106,18 @@ function validate() {
   return true
 }
 
+function selectTag(tag) {
+  if (!tagPeriods.value[tag]?.active) return
+  form.productTag = tag
+}
+
+async function fetchTagPeriods() {
+  try {
+    const data = await request.get('/products/tags/periods')
+    tagPeriods.value = data
+  } catch { /* ignore */ }
+}
+
 async function handleSubmit() {
   if (!validate()) return
   submitting.value = true
@@ -93,6 +128,7 @@ async function handleSubmit() {
       price: form.price,
       originalPrice: form.originalPrice || undefined,
       description: form.description || undefined,
+      productTag: form.productTag,
       images: form.images.length ? form.images : undefined
     }
     if (isEdit.value) {
@@ -113,6 +149,7 @@ async function handleSubmit() {
 onMounted(async () => {
   try {
     categories.value = await getCategories()
+    await fetchTagPeriods()
   } catch { /* ignore */ }
 
   if (isEdit.value) {
@@ -123,6 +160,7 @@ onMounted(async () => {
       form.price = product.price
       form.originalPrice = product.originalPrice
       form.description = product.description || ''
+      form.productTag = product.productTag || 'NORMAL'
       form.images = product.images || []
     } catch {
       window.$toast?.error('加载商品信息失败')
@@ -158,6 +196,21 @@ onMounted(async () => {
   justify-content: flex-end;
   gap: 12px;
   margin-top: 24px;
+}
+
+.tag-options { display: flex; gap: 10px; }
+.tag-option {
+  flex: 1; padding: 12px; border: 2px solid var(--border); border-radius: var(--radius);
+  text-align: center; cursor: pointer; transition: all 0.2s; font-size: 14px; position: relative;
+}
+.tag-option.active {
+  border-color: var(--primary); background: var(--primary-light); font-weight: 500;
+}
+.tag-option.disabled {
+  opacity: 0.5; cursor: not-allowed; background: #f5f5f5;
+}
+.tag-disabled-hint {
+  display: block; font-size: 11px; color: var(--text-muted); margin-top: 2px;
 }
 
 @media (max-width: 768px) {

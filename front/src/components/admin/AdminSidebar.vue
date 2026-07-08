@@ -1,9 +1,6 @@
 <template>
   <nav class="admin-sidebar card">
     <h3 class="sidebar-heading">管理后台</h3>
-    <router-link :class="['sidebar-item', { active: current === 'dashboard' }]" to="/admin">
-      📊 数据面板
-    </router-link>
     <router-link :class="['sidebar-item', { active: current === 'users' }]" to="/admin/users">
       👥 用户管理
     </router-link>
@@ -16,9 +13,11 @@
     <router-link :class="['sidebar-item', { active: current === 'orders' }]" to="/admin/orders">
       📋 订单管理
     </router-link>
-    <div class="sidebar-divider"></div>
-    <router-link class="sidebar-item" to="/">
-      ← 返回首页
+    <router-link :class="['sidebar-item', { active: current === 'verifications' }]" to="/admin/verifications">
+      🛡️ 认证管理
+    </router-link>
+    <router-link :class="['sidebar-item', { active: current === 'complaints' }]" to="/admin/complaints">
+      📝 投诉管理
     </router-link>
   </nav>
 </template>

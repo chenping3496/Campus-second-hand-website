@@ -26,6 +26,7 @@ public class ProductDTO {
     private String rejectReason;
     private List<String> images;
     private Integer viewCount;
+    private String productTag;
     private LocalDateTime createdAt;
     private Boolean isFavorited;
     private Long favoriteCount;
@@ -56,6 +57,7 @@ public class ProductDTO {
             dto.setImages(Arrays.asList(product.getImages().split(",")));
         }
         dto.setViewCount(product.getViewCount());
+        dto.setProductTag(product.getProductTag() != null ? product.getProductTag().name() : "NORMAL");
         dto.setCreatedAt(product.getCreatedAt());
         return dto;
     }

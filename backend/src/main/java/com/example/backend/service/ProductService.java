@@ -47,6 +47,7 @@ public class ProductService {
 
     public PageResult<ProductDTO> searchProducts(String keyword, Long categoryId,
                                                   BigDecimal minPrice, BigDecimal maxPrice,
+                                                  String productTag,
                                                   int page, int size, String sortBy, String sortDir) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, Product.ProductStatus.ON_SALE);
@@ -56,6 +57,9 @@ public class ProductService {
         if (categoryId != null) wrapper.eq(Product::getCategoryId, categoryId);
         if (minPrice != null) wrapper.ge(Product::getPrice, minPrice);
         if (maxPrice != null) wrapper.le(Product::getPrice, maxPrice);
+        if (productTag != null && !productTag.isEmpty()) {
+            wrapper.eq(Product::getProductTag, Product.ProductTag.valueOf(productTag));
+        }
         applySort(wrapper, sortBy, sortDir);
 
         Page<Product> mpPage = productMapper.selectPage(new Page<>(page + 1, size), wrapper);
@@ -107,6 +111,13 @@ public class ProductService {
         product.setCategoryId(category.getId());
         product.setSellerId(sellerId);
         product.setStatus(Product.ProductStatus.PENDING);
+        if (request.getProductTag() != null && !request.getProductTag().isEmpty()) {
+            try {
+                product.setProductTag(Product.ProductTag.valueOf(request.getProductTag()));
+            } catch (IllegalArgumentException e) {
+                product.setProductTag(Product.ProductTag.NORMAL);
+            }
+        }
         if (request.getImages() != null && !request.getImages().isEmpty()) {
             product.setImages(String.join(",", request.getImages()));
         }

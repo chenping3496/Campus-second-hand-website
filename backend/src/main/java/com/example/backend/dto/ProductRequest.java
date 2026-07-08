@@ -22,6 +22,8 @@ public class ProductRequest {//requestdto类型用于前端申请创建，且有
     
     @NotNull(message = "商品分类不能为空")
     private Long categoryId;
-    
+
+    private String productTag;
+
     private List<String> images;
 }

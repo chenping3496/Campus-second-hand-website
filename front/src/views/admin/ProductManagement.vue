@@ -67,7 +67,7 @@ import EmptyState from '@/components/common/EmptyState.vue'
 import Pagination from '@/components/common/Pagination.vue'
 
 const keyword = ref('')
-const statusFilter = ref('PENDING')
+const statusFilter = ref('')
 const products = ref([])
 const page = ref(0)
 const total = ref(0)

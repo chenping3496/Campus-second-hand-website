@@ -73,6 +73,8 @@ public class DataInitializer implements CommandLineRunner {
         admin.setRole(User.UserRole.ADMIN);
         admin.setStatus(User.UserStatus.ACTIVE);
         admin.setAvatar("/images/avatars/admin.png");
+        admin.setVerificationStatus(User.VerificationStatus.APPROVED);
+        admin.setRealName("系统管理员");
         userMapper.insert(admin);
 
         String[] nicknames = {"小明", "小红", "小刚", "小丽", "小强", "小芳", "小伟", "小娟", "小军", "小燕"};
@@ -88,6 +90,13 @@ public class DataInitializer implements CommandLineRunner {
             user.setStudentId("2024000" + String.format("%03d", i));
             user.setDormitory("学生公寓" + ((i % 5) + 1) + "号楼" + (100 + i) + "室");
             user.setAvatar("/images/avatars/user" + i + ".png");
+            // user1 already approved, others need verification
+            if (i == 1) {
+                user.setVerificationStatus(User.VerificationStatus.APPROVED);
+                user.setRealName(nicknames[i - 1]);
+                user.setIdentityType(User.IdentityType.STUDENT);
+                user.setIdentityNumber("2024000001");
+            }
             userMapper.insert(user);
         }
     }
