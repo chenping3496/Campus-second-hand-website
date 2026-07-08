@@ -1,0 +1,20 @@
+# AI缓存
+.claude/
+
+# Java后端过滤
+backend/target/
+backend/.idea/
+backend/*.iml
+backend/*.log
+backend/mvnw
+backend/mvnw.cmd
+
+# 前端过滤
+front/node_modules/
+front/dist/
+front/.vscode/
+front/npm-debug.log*
+
+# 系统杂项
+.DS_Store
+*.tmp
