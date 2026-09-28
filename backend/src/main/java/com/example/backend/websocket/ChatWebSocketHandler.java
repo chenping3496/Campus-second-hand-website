@@ -1,11 +1,15 @@
 package com.example.backend.websocket;
 
+import com.example.backend.config.RabbitMQConfig;
+import com.example.backend.consumer.ChatOfflineMessage;
 import com.example.backend.dto.MessageDTO;
 import com.example.backend.dto.Result;
 import com.example.backend.service.ChatService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -23,9 +27,15 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Autowired
     private ChatService chatService;// 聊天业务逻辑（发送消息、已读、创建会话）
-    
+
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${spring.rabbitmq.enabled:true}")
+    private boolean rabbitEnabled;
+
     private final ObjectMapper objectMapper = new ObjectMapper();// JSON 转换工具
-    
+
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         Long userId = (Long) session.getAttributes().get("userId");
@@ -33,14 +43,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             userSessions.put(userId, session);// 用户上线 → 存入在线列表
         }
     }
-    
+
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         Long userId = (Long) session.getAttributes().get("userId");
         if (userId == null) {
             return;
         }
-        
+
         try {
             JsonNode jsonNode = objectMapper.readTree(message.getPayload());// 把前端发来的 JSON 字符串转成对象
             String action = jsonNode.get("action").asText();// 获取动作类型
@@ -60,7 +70,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             sendError(session, "消息格式错误");
         }
     }
-    
+
     private void handleSendMessage(Long senderId, JsonNode jsonNode, WebSocketSession session) throws IOException {
         Long conversationId = jsonNode.get("conversationId").asLong();
         String content = jsonNode.get("content").asText();
@@ -68,7 +78,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
         // 2. 调用 Service 保存消息到数据库
         Result<MessageDTO> result = chatService.sendMessage(conversationId, senderId, content, type);
-        
+
         if (result.getCode() == 200) {
             MessageDTO messageDTO = result.getData();
 
@@ -86,17 +96,25 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             WebSocketSession receiverSession = userSessions.get(receiverId);
             if (receiverSession != null && receiverSession.isOpen()) {
                 receiverSession.sendMessage(new TextMessage(messageJson));
+            } else if (rabbitEnabled && rabbitTemplate != null) {
+                // 接收方离线：异步落库一条“新消息”通知，避免消息只活在内存里
+                ChatOfflineMessage offline = new ChatOfflineMessage();
+                offline.setReceiverId(receiverId);
+                offline.setSenderId(senderId);
+                offline.setConversationId(conversationId);
+                offline.setContent(content);
+                rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.CHAT_OFFLINE_ROUTING_KEY, offline);
             }
         } else {
             sendError(session, result.getMessage());
         }
     }
-    
+
     private void handleMarkAsRead(Long userId, JsonNode jsonNode) {
         Long conversationId = jsonNode.get("conversationId").asLong();
         chatService.markMessagesAsRead(conversationId, userId);
     }
-    
+
     private void sendError(WebSocketSession session, String message) throws IOException {
         String errorJson = objectMapper.writeValueAsString(Map.of(
                 "action", "error",
@@ -104,7 +122,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         ));
         session.sendMessage(new TextMessage(errorJson));
     }
-    
+
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) throws Exception {
         Long userId = (Long) session.getAttributes().get("userId");
@@ -112,7 +130,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             userSessions.remove(userId);
         }
     }
-    
+
     public void sendToUser(Long userId, Object message) {
         WebSocketSession session = userSessions.get(userId);
         if (session != null && session.isOpen()) {

@@ -33,9 +33,6 @@ public class AdminController {
     private CategoryService categoryService;
 
     @Autowired
-    private StatisticsService statisticsService;
-
-    @Autowired
     private VerificationService verificationService;
 
     @Autowired
@@ -163,14 +160,6 @@ public class AdminController {
         Result<Void> check = checkAdmin(request);
         if (check != null) return Result.error(check.getCode(), check.getMessage());
         return Result.success(orderService.getOrderListForAdmin(status, orderNo, page, size));
-    }
-
-    @GetMapping("/statistics")
-    @Operation(summary = "数据统计面板")
-    public Result<StatisticsDTO> getStatistics(HttpServletRequest request) {
-        Result<Void> check = checkAdmin(request);
-        if (check != null) return Result.error(check.getCode(), check.getMessage());
-        return Result.success(statisticsService.getStatistics());
     }
 
     // ============ Verification management ============

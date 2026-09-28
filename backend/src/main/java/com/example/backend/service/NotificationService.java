@@ -1,5 +1,7 @@
 package com.example.backend.service;
 
+import com.example.backend.consumer.NotificationMessage;
+import com.example.backend.config.RabbitMQConfig;
 import com.example.backend.dto.*;
 import com.example.backend.entity.*;
 import com.example.backend.mapper.MessageMapper;
@@ -7,7 +9,9 @@ import com.example.backend.mapper.NotificationMapper;
 import com.example.backend.mapper.UserMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,21 +26,42 @@ public class NotificationService {
     @Autowired
     private UserMapper userMapper;
 
-    @Transactional
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${spring.rabbitmq.enabled:true}")
+    private boolean rabbitEnabled;
+
+    /**
+     * 发送通知：开启 MQ 时异步落库 + 实时推送，接口响应时间不再被通知写入阻塞；
+     * 未开启 MQ 时回退到同步落库，保证通知不丢。
+     */
     public void sendNotification(Long userId, String title, String content,
                                   Notification.NotificationType type, Long relatedId) {
+        NotificationMessage message = new NotificationMessage();
+        message.setUserId(userId);
+        message.setTitle(title);
+        message.setContent(content);
+        message.setType(type);
+        message.setRelatedId(relatedId);
+
+        if (rabbitEnabled && rabbitTemplate != null) {
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.NOTIFICATION_ROUTING_KEY, message);
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.NOTIFICATION_PUSH_ROUTING_KEY, message);
+            return;
+        }
+
+        // 回退：同步落库
         User user = userMapper.selectById(userId);
         if (user == null) {
             return;
         }
-
         Notification notification = new Notification();
         notification.setUserId(userId);
         notification.setTitle(title);
         notification.setContent(content);
         notification.setType(type);
         notification.setRelatedId(relatedId);
-
         notificationMapper.insert(notification);
     }
 

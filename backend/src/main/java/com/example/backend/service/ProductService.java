@@ -6,6 +6,8 @@ import com.example.backend.mapper.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,15 @@ public class ProductService {
 
     @Autowired
     private FavoriteMapper favoriteMapper;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private DefaultRedisScript<Long> viewCountIncrementScript;
+
+    @Autowired
+    private FavoriteService favoriteService;
 
     @Autowired
     private OrderMapper orderMapper;
@@ -72,20 +83,26 @@ public class ProductService {
             return Result.error("商品不存在");
         }
 
-        product.setViewCount(product.getViewCount() + 1);
+        // 浏览计数：Redis 热点数据，Lua 原子递增，避免并发读-改-写丢失更新
+        String viewKey = "product:view:" + id;
+        stringRedisTemplate.opsForValue().setIfAbsent(viewKey,
+                String.valueOf(product.getViewCount() == null ? 0 : product.getViewCount()));
+        Long viewCount = stringRedisTemplate.execute(viewCountIncrementScript, java.util.List.of(viewKey));
+        int currentView = viewCount != null
+                ? viewCount.intValue()
+                : (product.getViewCount() == null ? 0 : product.getViewCount());
+        product.setViewCount(currentView);
         productMapper.updateById(product);
 
         Category category = categoryMapper.selectById(product.getCategoryId());
         User seller = userMapper.selectById(product.getSellerId());
         ProductDTO dto = ProductDTO.fromEntity(product, category, seller);
 
-        LambdaQueryWrapper<Favorite> favWrapper = new LambdaQueryWrapper<>();
-        favWrapper.eq(Favorite::getProductId, id);
-        dto.setFavoriteCount(favoriteMapper.selectCount(favWrapper));
+        // 收藏数：Redis 热点数据，冷启动回源 DB 并回填
+        dto.setFavoriteCount(favoriteService.getFavoriteCount(id));
 
         if (currentUserId != null) {
-            favWrapper.eq(Favorite::getUserId, currentUserId);
-            dto.setIsFavorited(favoriteMapper.selectCount(favWrapper) > 0);
+            dto.setIsFavorited(favoriteService.isFavorited(currentUserId, id));
         }
 
         return Result.success(dto);

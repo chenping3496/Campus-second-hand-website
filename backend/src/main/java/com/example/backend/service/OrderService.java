@@ -1,11 +1,17 @@
 package com.example.backend.service;
 
+import com.example.backend.config.RabbitMQConfig;
+import com.example.backend.consumer.OrderEventMessage;
 import com.example.backend.dto.*;
 import com.example.backend.entity.*;
 import com.example.backend.mapper.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +35,18 @@ public class OrderService {
 
     @Autowired
     private NotificationService notificationService;
+
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${spring.rabbitmq.enabled:true}")
+    private boolean rabbitEnabled;
+
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private DefaultRedisScript<Long> orderStatusTransitionScript;
 
     @Transactional
     public Result<OrderDTO> createOrder(Long buyerId, Long productId, String paymentMethod) {
@@ -61,6 +79,9 @@ public class OrderService {
         order.setPaymentTime(LocalDateTime.now());
 
         orderMapper.insert(order);
+
+        // 初始化订单状态到 Redis，供后续 CAS 原子状态转换
+        stringRedisTemplate.opsForValue().set("order:status:" + order.getId(), Order.OrderStatus.PENDING.name());
 
         product.setStatus(Product.ProductStatus.SOLD);
         product.setUpdatedAt(LocalDateTime.now());
@@ -143,6 +164,10 @@ public class OrderService {
             return Result.error("订单状态不正确");
         }
 
+        if (!casOrderStatus(order, Order.OrderStatus.PENDING, Order.OrderStatus.SHIPPED)) {
+            return Result.error("订单状态不正确");
+        }
+
         order.setStatus(Order.OrderStatus.SHIPPED);
         order.setShipTime(LocalDateTime.now());
         order.setUpdatedAt(LocalDateTime.now());
@@ -173,6 +198,10 @@ public class OrderService {
         }
 
         if (order.getStatus() != Order.OrderStatus.SHIPPED) {
+            return Result.error("订单状态不正确");
+        }
+
+        if (!casOrderStatus(order, Order.OrderStatus.SHIPPED, Order.OrderStatus.COMPLETED)) {
             return Result.error("订单状态不正确");
         }
 
@@ -209,6 +238,10 @@ public class OrderService {
             return Result.error("只能取消待发货的订单");
         }
 
+        if (!casOrderStatus(order, Order.OrderStatus.PENDING, Order.OrderStatus.CANCELLED)) {
+            return Result.error("只能取消待发货的订单");
+        }
+
         order.setStatus(Order.OrderStatus.CANCELLED);
         order.setCancelTime(LocalDateTime.now());
         order.setCancelReason(reason);
@@ -216,13 +249,20 @@ public class OrderService {
         orderMapper.updateById(order);
 
         Product product = productMapper.selectById(order.getProductId());
-        if (product != null) {
+        String productTitle = product != null ? product.getTitle() : "未知商品";
+
+        // 商品状态回滚改为异步：开启 MQ 时投递 CANCELLED 事件，由 OrderEventConsumer 消费回滚，
+        // 避免 cancelOrder 与消费者重复执行；未开启 MQ 时回退到同步回滚，保证功能不缺失。
+        if (rabbitEnabled && rabbitTemplate != null) {
+            OrderEventMessage event = new OrderEventMessage();
+            event.setOrderId(order.getId());
+            event.setEventType("CANCELLED");
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME, RabbitMQConfig.ORDER_EVENT_ROUTING_KEY, event);
+        } else if (product != null) {
             product.setStatus(Product.ProductStatus.ON_SALE);
             product.setUpdatedAt(LocalDateTime.now());
             productMapper.updateById(product);
         }
-
-        String productTitle = product != null ? product.getTitle() : "未知商品";
         Long notifyUserId = order.getBuyerId().equals(userId)
                 ? order.getSellerId() : order.getBuyerId();
         notificationService.sendNotification(
@@ -248,6 +288,18 @@ public class OrderService {
 
         Page<Order> mpPage = orderMapper.selectPage(new Page<>(page + 1, size), wrapper);
         return toPageResult(mpPage, page, size);
+    }
+
+    /**
+     * 订单状态 CAS：Lua 原子「资格判断（当前状态==预期）+ 数据更新（置为新状态）」，
+     * 防止并发请求重复发货/确认/取消。冷启动时以 DB 状态初始化 Redis 键。
+     */
+    private boolean casOrderStatus(Order order, Order.OrderStatus expected, Order.OrderStatus next) {
+        String key = "order:status:" + order.getId();
+        stringRedisTemplate.opsForValue().setIfAbsent(key, order.getStatus().name());
+        Long ret = stringRedisTemplate.execute(orderStatusTransitionScript,
+                java.util.List.of(key), expected.name(), next.name());
+        return ret != null && ret == 1L;
     }
 
     private String generateOrderNo() {

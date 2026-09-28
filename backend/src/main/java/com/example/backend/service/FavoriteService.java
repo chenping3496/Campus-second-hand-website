@@ -10,6 +10,8 @@ import com.example.backend.mapper.UserMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +29,27 @@ public class FavoriteService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private StringRedisTemplate stringRedisTemplate;
+
+    @Autowired
+    private DefaultRedisScript<Long> favoriteAddScript;
+
+    @Autowired
+    private DefaultRedisScript<Long> favoriteRemoveScript;
+
+    private static String favCountKey(Long productId) {
+        return "product:fav:" + productId;
+    }
+
+    private static String userFavKey(Long userId) {
+        return "user:fav:" + userId;
+    }
+
+    /**
+     * 收藏：Redis + Lua 原子执行「资格判断（是否已收藏）+ 数据更新（用户集合加入、商品计数 +1）」，
+     * 防止并发请求重复收藏、计数丢失；Redis 守卫通过后再落 DB 做持久化。
+     */
     @Transactional
     public Result<Void> addFavorite(Long userId, Long productId) {
         User user = userMapper.selectById(userId);
@@ -39,12 +62,14 @@ public class FavoriteService {
             return Result.error("商品不存在");
         }
 
-        LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
-        wrapper.eq(Favorite::getUserId, userId).eq(Favorite::getProductId, productId);
-        if (favoriteMapper.selectCount(wrapper) > 0) {
+        List<String> keys = List.of(favCountKey(productId), userFavKey(userId));
+        Long ret = stringRedisTemplate.execute(favoriteAddScript, keys, productId.toString());
+        if (ret == null || ret == -1L) {
+            // 已收藏（资格判断失败）——并发场景下只有第一个请求能走到这里
             return Result.error("已收藏该商品");
         }
 
+        // Redis 已作为原子守卫，DB 仅做落盘；偶发 DB 失败由 removeFavorite 幂等自愈
         Favorite favorite = new Favorite();
         favorite.setUserId(userId);
         favorite.setProductId(productId);
@@ -53,6 +78,9 @@ public class FavoriteService {
         return Result.success();
     }
 
+    /**
+     * 取消收藏：同上，Lua 原子执行资格判断 + 数据更新；DB 做幂等删除。
+     */
     @Transactional
     public Result<Void> removeFavorite(Long userId, Long productId) {
         User user = userMapper.selectById(userId);
@@ -65,11 +93,34 @@ public class FavoriteService {
             return Result.error("商品不存在");
         }
 
+        List<String> keys = List.of(favCountKey(productId), userFavKey(userId));
+        stringRedisTemplate.execute(favoriteRemoveScript, keys, productId.toString());
+
+        // DB 幂等删除（无论 Redis 是否命中，保证持久层一致）
         LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Favorite::getUserId, userId).eq(Favorite::getProductId, productId);
         favoriteMapper.delete(wrapper);
 
         return Result.success();
+    }
+
+    /**
+     * 商品收藏数：Redis 热点数据，冷启动时回源 DB 并回填。
+     */
+    public long getFavoriteCount(Long productId) {
+        String val = stringRedisTemplate.opsForValue().get(favCountKey(productId));
+        if (val != null) {
+            try {
+                return Long.parseLong(val);
+            } catch (NumberFormatException ignored) {
+                // 序列异常则回源
+            }
+        }
+        LambdaQueryWrapper<Favorite> wrapper = new LambdaQueryWrapper<>();
+        wrapper.eq(Favorite::getProductId, productId);
+        long count = favoriteMapper.selectCount(wrapper);
+        stringRedisTemplate.opsForValue().set(favCountKey(productId), String.valueOf(count));
+        return count;
     }
 
     public PageResult<ProductDTO> getFavorites(Long userId, int page, int size) {
@@ -91,9 +142,7 @@ public class FavoriteService {
                     Product p = productMapper.selectById(f.getProductId());
                     ProductDTO dto = ProductDTO.fromEntity(p, null, null);
                     dto.setIsFavorited(true);
-                    LambdaQueryWrapper<Favorite> countWrapper = new LambdaQueryWrapper<>();
-                    countWrapper.eq(Favorite::getProductId, f.getProductId());
-                    dto.setFavoriteCount(favoriteMapper.selectCount(countWrapper));
+                    dto.setFavoriteCount(getFavoriteCount(f.getProductId()));
                     return dto;
                 })
                 .toList();

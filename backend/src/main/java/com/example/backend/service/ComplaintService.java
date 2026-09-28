@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.example.backend.dto.*;
 import com.example.backend.entity.Complaint;
+import com.example.backend.entity.Notification;
 import com.example.backend.entity.User;
 import com.example.backend.mapper.ComplaintMapper;
 import com.example.backend.mapper.UserMapper;
@@ -27,6 +28,9 @@ public class ComplaintService {
     @Autowired
     private UserMapper userMapper;
 
+    @Autowired
+    private NotificationService notificationService;
+
     // ========= User-side =========
 
     @Transactional
@@ -41,6 +45,12 @@ public class ComplaintService {
         c.setImages(request.getImages());
         c.setStatus(Complaint.ComplaintStatus.PENDING);
         complaintMapper.insert(c);
+
+        notificationService.sendNotification(
+                userId, "投诉已提交",
+                "您的投诉「" + c.getTitle() + "」已提交，我们将在 1 个工作日内处理。",
+                Notification.NotificationType.SYSTEM, c.getId()
+        );
         return Result.success();
     }
 
@@ -74,6 +84,12 @@ public class ComplaintService {
         c.setHandledBy(adminId);
         c.setHandledAt(LocalDateTime.now());
         complaintMapper.updateById(c);
+
+        notificationService.sendNotification(
+                c.getUserId(), "投诉处理完成",
+                "您的投诉「" + c.getTitle() + "」已处理完成。回复：" + adminResponse,
+                Notification.NotificationType.SYSTEM, c.getId()
+        );
         return Result.success();
     }
 
@@ -84,6 +100,12 @@ public class ComplaintService {
         c.setStatus(Complaint.ComplaintStatus.PROCESSING);
         c.setHandledBy(adminId);
         complaintMapper.updateById(c);
+
+        notificationService.sendNotification(
+                c.getUserId(), "投诉处理中",
+                "您的投诉「" + c.getTitle() + "」正在处理中。",
+                Notification.NotificationType.SYSTEM, c.getId()
+        );
         return Result.success();
     }
 
