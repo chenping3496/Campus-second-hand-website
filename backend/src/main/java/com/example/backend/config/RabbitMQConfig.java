@@ -37,6 +37,11 @@ public class RabbitMQConfig {
     public static final String CHAT_OFFLINE_ROUTING_KEY = "chat.offline";
     public static final String CHAT_OFFLINE_DLQ = "chat.offline.dlq";
 
+    // 5. 浏览计数（MQ 合并：单消费者按 productId 聚合 delta，定时批量回写 DB）
+    public static final String VIEW_COUNT_QUEUE = "view.count.queue";
+    public static final String VIEW_COUNT_ROUTING_KEY = "view.count";
+    public static final String VIEW_COUNT_DLQ = "view.count.dlq";
+
     @Bean
     public DirectExchange directExchange() {
         return new DirectExchange(EXCHANGE_NAME);
@@ -80,6 +85,14 @@ public class RabbitMQConfig {
                 .build();
     }
 
+    @Bean
+    public Queue viewCountQueue() {
+        return QueueBuilder.durable(VIEW_COUNT_QUEUE)
+                .withArgument("x-dead-letter-exchange", DLX_NAME)
+                .withArgument("x-dead-letter-routing-key", VIEW_COUNT_DLQ)
+                .build();
+    }
+
     // 死信队列：存放重试耗尽的消息，可接专门消费者做告警 / 人工排查
     @Bean
     public Queue notificationDeadQueue() {
@@ -99,6 +112,11 @@ public class RabbitMQConfig {
     @Bean
     public Queue chatOfflineDeadQueue() {
         return QueueBuilder.durable(CHAT_OFFLINE_DLQ).build();
+    }
+
+    @Bean
+    public Queue viewCountDeadQueue() {
+        return QueueBuilder.durable(VIEW_COUNT_DLQ).build();
     }
 
     @Bean
@@ -122,6 +140,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Binding viewCountBinding() {
+        return BindingBuilder.bind(viewCountQueue()).to(directExchange()).with(VIEW_COUNT_ROUTING_KEY);
+    }
+
+    @Bean
     public Binding notificationDeadBinding() {
         return BindingBuilder.bind(notificationDeadQueue()).to(deadLetterExchange()).with(NOTIFICATION_DLQ);
     }
@@ -139,6 +162,11 @@ public class RabbitMQConfig {
     @Bean
     public Binding chatOfflineDeadBinding() {
         return BindingBuilder.bind(chatOfflineDeadQueue()).to(deadLetterExchange()).with(CHAT_OFFLINE_DLQ);
+    }
+
+    @Bean
+    public Binding viewCountDeadBinding() {
+        return BindingBuilder.bind(viewCountDeadQueue()).to(deadLetterExchange()).with(VIEW_COUNT_DLQ);
     }
 
     @Bean

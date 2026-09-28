@@ -5,7 +5,10 @@ import com.example.backend.entity.*;
 import com.example.backend.mapper.*;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.example.backend.config.RabbitMQConfig;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
@@ -47,6 +50,12 @@ public class ProductService {
     @Autowired
     private NotificationService notificationService;
 
+    @Autowired(required = false)
+    private RabbitTemplate rabbitTemplate;
+
+    @Value("${spring.rabbitmq.enabled:true}")
+    private boolean rabbitEnabled;
+
     public PageResult<ProductDTO> getProductList(int page, int size, String sortBy, String sortDir) {
         LambdaQueryWrapper<Product> wrapper = new LambdaQueryWrapper<>();
         wrapper.eq(Product::getStatus, Product.ProductStatus.ON_SALE);
@@ -83,7 +92,9 @@ public class ProductService {
             return Result.error("商品不存在");
         }
 
-        // 浏览计数：Redis 热点数据，Lua 原子递增，避免并发读-改-写丢失更新
+        // 浏览计数：Redis 原子 INCR 作为实时展示值，不再每次同步回写 DB（避免每次详情访问都写库）。
+        // 持久化交给 ViewCountConsumer：投递一条事件到 view.count.queue，由单消费者按 productId
+        // 合并 delta、定时批量 UPDATE。MQ 不可用时回退到同步累加，保证计数不丢。
         String viewKey = "product:view:" + id;
         stringRedisTemplate.opsForValue().setIfAbsent(viewKey,
                 String.valueOf(product.getViewCount() == null ? 0 : product.getViewCount()));
@@ -92,7 +103,7 @@ public class ProductService {
                 ? viewCount.intValue()
                 : (product.getViewCount() == null ? 0 : product.getViewCount());
         product.setViewCount(currentView);
-        productMapper.updateById(product);
+        publishViewEvent(id);
 
         Category category = categoryMapper.selectById(product.getCategoryId());
         User seller = userMapper.selectById(product.getSellerId());
@@ -106,6 +117,19 @@ public class ProductService {
         }
 
         return Result.success(dto);
+    }
+
+    /**
+     * 投递浏览事件给 MQ 合并消费者；MQ 不可用时回退到同步累加。
+     */
+    private void publishViewEvent(Long productId) {
+        if (rabbitEnabled && rabbitTemplate != null) {
+            rabbitTemplate.convertAndSend(RabbitMQConfig.EXCHANGE_NAME,
+                    RabbitMQConfig.VIEW_COUNT_ROUTING_KEY,
+                    new com.example.backend.consumer.ViewCountMessage(productId));
+        } else {
+            productMapper.incrementViewCount(productId, 1L);
+        }
     }
 
     @Transactional
