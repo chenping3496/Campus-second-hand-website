@@ -35,12 +35,16 @@ spring:
     virtual-host: /
     listener:
       simple:
-        acknowledge-mode: manual
+        # auto：消费者抛出的异常由 Spring 统一处理（重试 → 耗尽后进死信队列）。
+        # 不再用 manual + basicNack(requeue=true)，避免毒消息无限重投。
+        acknowledge-mode: auto
         prefetch: 1
         retry:
           enabled: true
           max-attempts: 3
           initial-interval: 1000ms
+        # 重试耗尽后不再 requeue，按队列上 x-dead-letter-exchange 路由到死信队列
+        default-requeue-rejected: false
 
 server:
   port: 8081

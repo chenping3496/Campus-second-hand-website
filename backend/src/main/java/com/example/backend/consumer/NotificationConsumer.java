@@ -5,19 +5,17 @@ import com.example.backend.entity.Notification;
 import com.example.backend.entity.User;
 import com.example.backend.mapper.NotificationMapper;
 import com.example.backend.mapper.UserMapper;
-import com.rabbitmq.client.Channel;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
-import java.io.IOException;
-
 /**
- * 消费者 1：通知异步落库。
- * 由 NotificationService.sendNotification 在开启 MQ 时投递到 notification 路由键。
+ * 消费者 1：通知异步落库。由 NotificationService.sendNotification 在开启 MQ 时投递到 notification 路由键。
+ * <p>
+ * acknowledge-mode=auto：方法正常返回即 ack；抛异常则由 Spring 重试（max-attempts=3），
+ * 重试耗尽后 default-requeue-rejected=false → 消息经 x-dead-letter-exchange 进入死信队列，
+ * 不再无限 requeue。
  */
 @Component
 @ConditionalOnProperty(prefix = "spring.rabbitmq", name = "enabled", havingValue = "true", matchIfMissing = true)
@@ -30,28 +28,19 @@ public class NotificationConsumer {
     private UserMapper userMapper;
 
     @RabbitListener(queues = RabbitMQConfig.NOTIFICATION_QUEUE)
-    public void handleNotification(NotificationMessage message, Channel channel,
-                                    @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) {
-        try {
-            User user = userMapper.selectById(message.getUserId());
-            if (user == null) {
-                channel.basicAck(deliveryTag, false);
-                return;
-            }
-            Notification notification = new Notification();
-            notification.setUserId(message.getUserId());
-            notification.setTitle(message.getTitle());
-            notification.setContent(message.getContent());
-            notification.setType(message.getType());
-            notification.setRelatedId(message.getRelatedId());
-            notificationMapper.insert(notification);
-            channel.basicAck(deliveryTag, false);
-        } catch (Exception e) {
-            try {
-                channel.basicNack(deliveryTag, false, true);
-            } catch (IOException ex) {
-                ex.printStackTrace();
-            }
+    public void handleNotification(NotificationMessage message) {
+        User user = userMapper.selectById(message.getUserId());
+        if (user == null) {
+            // 用户不存在视为业务可丢弃，正常返回 → ack
+            return;
         }
+        Notification notification = new Notification();
+        notification.setUserId(message.getUserId());
+        notification.setTitle(message.getTitle());
+        notification.setContent(message.getContent());
+        notification.setType(message.getType());
+        notification.setRelatedId(message.getRelatedId());
+        // DB 异常会向上抛出 → Spring 重试 → 耗尽后进死信队列
+        notificationMapper.insert(notification);
     }
 }
