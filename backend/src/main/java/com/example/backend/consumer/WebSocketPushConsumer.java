@@ -1,7 +1,7 @@
 package com.example.backend.consumer;
 
 import com.example.backend.config.RabbitMQConfig;
-import com.example.backend.websocket.ChatWebSocketHandler;
+import com.example.backend.websocket.enhanced.EnhancedChatWebSocketHandler;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,11 +19,11 @@ import java.util.Map;
 public class WebSocketPushConsumer {
 
     @Autowired
-    private ChatWebSocketHandler chatWebSocketHandler;
+    private EnhancedChatWebSocketHandler enhancedChatWebSocketHandler;
 
     @RabbitListener(queues = RabbitMQConfig.NOTIFICATION_PUSH_QUEUE)
     public void handlePush(NotificationMessage message) {
-        chatWebSocketHandler.sendToUser(message.getUserId(), Map.of(
+        enhancedChatWebSocketHandler.sendToUser(message.getUserId(), Map.of(
                 "action", "notification",
                 "data", Map.of(
                         "title", message.getTitle() == null ? "" : message.getTitle(),

@@ -21,7 +21,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.util.List;
 
 @Service
-public class FavoriteService {
+public class   FavoriteService {
 
     @Autowired
     private FavoriteMapper favoriteMapper;

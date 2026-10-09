@@ -18,3 +18,8 @@ front/npm-debug.log*
 # 系统杂项
 .DS_Store
 *.tmp
+# IDE配置
+.idea/
+
+# 面试资料（本地保留，不推送）
+面试准备-字节跳动-20261014/

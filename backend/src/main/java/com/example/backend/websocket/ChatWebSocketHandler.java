@@ -57,10 +57,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler implements Messag
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    @Override
+    @Override //用户成功建立连接时完成会话初始化
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        // 从WebSocket会话属性中获取用户ID
         Long userId = (Long) session.getAttributes().get("userId");
+        // 检查用户ID是否不为空
         if (userId != null) {
+            // 将用户会话保存到用户会话映射中，键为用户ID
             userSessions.put(userId, session);
             // 全局在线登记：任意实例都能查到该用户在线
             stringRedisTemplate.opsForSet().add(WS_ONLINE_KEY, userId.toString());
@@ -173,17 +176,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler implements Messag
 
     /**
      * Redis Pub/Sub 回调：所有实例都会收到 publish，只对本实例持有的 userId 投递。
+ * 这是一个 Redis 消息监听器的实现，用于处理通过 Redis 发布订阅模式传递的消息。
+ * 当有消息发布时，所有订阅该频道的 Redis 实例都会收到消息，但只处理与本实例相关的用户消息。
      */
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
+        // 将消息体转换为字符串
             String body = new String(message.getBody());
+        // 将消息体解析为 WsPushEnvelope 对象，该对象封装了推送消息的详细信息
             WsPushEnvelope envelope = objectMapper.readValue(body, WsPushEnvelope.class);
+        // 检查 envelope 和 userId 是否为空，如果为空则直接返回，不处理该消息
             if (envelope == null || envelope.getUserId() == null) {
                 return;
             }
+        // 将消息投递给本地指定用户，通过 userId 过滤只处理本实例负责的用户
             deliverLocally(envelope.getUserId(), envelope.getMessageJson());
         } catch (Exception e) {
+        // 捕获并打印所有异常，确保监听器不会因为异常而停止工作
             e.printStackTrace();
         }
     }

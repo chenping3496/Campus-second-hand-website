@@ -12,4 +12,5 @@ public class ChatOfflineMessage {
     private Long senderId;
     private Long conversationId;
     private String content;
+    private String serverMessageId; // 新增：用于消息追踪和ACK
 }

@@ -8,9 +8,14 @@ import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * RabbitMQ配置类
+ * 用于配置RabbitMQ的交换机、队列、绑定关系以及消息转换器等
+ */
 @Configuration
 public class RabbitMQConfig {
 
+    // 定义主交换机名称
     public static final String EXCHANGE_NAME = "ershou.direct";
 
     // 死信交换机：消费重试耗尽（default-requeue-rejected=false）后，消息按各队列的
@@ -53,6 +58,7 @@ public class RabbitMQConfig {
     }
 
     // 主队列：绑定死信交换机，消费失败到上限后被 reject（不 requeue）→ 进死信队列
+    //配置持久化存储，绑定到死信交换机，设置死信路由键
     @Bean
     public Queue notificationQueue() {
         return QueueBuilder.durable(NOTIFICATION_QUEUE)
@@ -94,6 +100,7 @@ public class RabbitMQConfig {
     }
 
     // 死信队列：存放重试耗尽的消息，可接专门消费者做告警 / 人工排查
+    //配置死信队列
     @Bean
     public Queue notificationDeadQueue() {
         return QueueBuilder.durable(NOTIFICATION_DLQ).build();
@@ -169,11 +176,13 @@ public class RabbitMQConfig {
         return BindingBuilder.bind(viewCountDeadQueue()).to(deadLetterExchange()).with(VIEW_COUNT_DLQ);
     }
 
+    //消息转换器配置：配置Jackson2JsonMessageConverter，用于消息的JSON序列化和反序列化
     @Bean
     public MessageConverter jsonMessageConverter() {
         return new Jackson2JsonMessageConverter();
     }
 
+    //配置RabbitTemplate，设置消息转换器
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory) {
         RabbitTemplate template = new RabbitTemplate(connectionFactory);

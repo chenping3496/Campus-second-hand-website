@@ -38,14 +38,24 @@ public class AdminController {
     @Autowired
     private ComplaintService complaintService;
 
+/**
+ * 检查当前用户是否为管理员
+ * @param request HttpServletRequest对象，包含当前请求的信息
+ * @return 返回Result对象，如果用户不是管理员则返回错误信息，如果是管理员则返回null
+ */
     private Result<Void> checkAdmin(HttpServletRequest request) {
+    // 从请求属性中获取当前用户信息
         User user = (User) request.getAttribute("currentUser");
+    // 检查用户是否存在且角色是否为管理员
         if (user == null || user.getRole() != User.UserRole.ADMIN) {
+        // 如果用户不存在或不是管理员，返回403错误信息
             return Result.error(403, "无权限访问");
         }
+    // 如果是管理员，返回null
         return null;
     }
 
+    //用户
     @GetMapping("/users")
     @Operation(summary = "用户列表")
     public Result<PageResult<UserDTO>> getUserList(
@@ -88,6 +98,7 @@ public class AdminController {
         return Result.success(productService.getProductListForAdmin(status, keyword, page, size));
     }
 
+    //商品
     @PostMapping("/products/{id}/approve")
     @Operation(summary = "审核通过商品")
     public Result<Void> approveProduct(@PathVariable Long id, HttpServletRequest request) {
@@ -116,6 +127,7 @@ public class AdminController {
         return productService.forceOffShelf(id, reason);
     }
 
+    //分类
     @GetMapping("/categories")
     @Operation(summary = "获取全部分类")
     public Result<List<CategoryDTO>> getAllCategories(HttpServletRequest request) {
@@ -149,6 +161,7 @@ public class AdminController {
         return categoryService.deleteCategory(id);
     }
 
+    //订单
     @GetMapping("/orders")
     @Operation(summary = "订单管理列表")
     public Result<PageResult<OrderDTO>> getOrderList(
@@ -216,6 +229,8 @@ public class AdminController {
         if (check != null) return check;
         return verificationService.review(userId);
     }
+
+    //申诉
 
     @GetMapping("/verifications/appeals")
     @Operation(summary = "申诉列表")

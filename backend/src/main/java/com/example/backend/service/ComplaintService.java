@@ -109,26 +109,40 @@ public class ComplaintService {
         return Result.success();
     }
 
+/**
+ * 分页查询投诉信息，并转换为DTO对象
+ * @param wrapper 查询条件封装对象，用于构建查询条件
+ * @param page 当前页码
+ * @param size 每页记录数
+ * @return PageResult<ComplaintDTO> 包含投诉信息列表和分页信息的分页结果对象
+ */
     private PageResult<ComplaintDTO> queryPage(LambdaQueryWrapper<Complaint> wrapper, int page, int size) {
+    // 使用MyBatis-Plus的分页查询功能查询投诉记录
         Page<Complaint> mpPage = complaintMapper.selectPage(new Page<>(page + 1, size), wrapper);
+    // 获取查询结果中的记录列表
         List<Complaint> complaints = mpPage.getRecords();
+    // 如果记录为空，返回空结果
         if (complaints.isEmpty()) return PageResult.of(List.of(), 0, page, size);
 
+    // 收集所有相关的用户ID
         Set<Long> userIds = new HashSet<>();
-        complaints.forEach(c -> {
-            userIds.add(c.getUserId());
-            if (c.getTargetUserId() != null) userIds.add(c.getTargetUserId());
-            if (c.getHandledBy() != null) userIds.add(c.getHandledBy());
+        complaints.forEach(c -> {  // 遍历每条投诉记录
+            userIds.add(c.getUserId());  // 添加投诉人ID
+            if (c.getTargetUserId() != null) userIds.add(c.getTargetUserId());  // 添加被投诉人ID（如果存在）
+            if (c.getHandledBy() != null) userIds.add(c.getHandledBy());  // 添加处理人ID（如果存在）
         });
+    // 批量查询所有相关用户信息，并转换为Map以便快速查找
         Map<Long, User> userMap = userMapper.selectBatchIds(userIds).stream()
                 .collect(Collectors.toMap(User::getId, u -> u));
 
+    // 将投诉实体列表转换为DTO列表，并填充相关用户信息
         List<ComplaintDTO> list = complaints.stream()
                 .map(c -> ComplaintDTO.fromEntity(c,
-                        userMap.get(c.getUserId()),
-                        userMap.get(c.getTargetUserId()),
-                        userMap.get(c.getHandledBy())))
+                        userMap.get(c.getUserId()),      // 投诉人信息
+                        userMap.get(c.getTargetUserId()), // 被投诉人信息
+                        userMap.get(c.getHandledBy())))   // 处理人信息
                 .toList();
+    // 返回分页结果
         return PageResult.of(list, mpPage.getTotal(), page, size);
     }
 }

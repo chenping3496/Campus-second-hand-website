@@ -73,15 +73,37 @@ springdoc:
     path: /swagger-ui.html
     tags-sorter: alpha
 
-cache:
+cache:     #缓存抽象框架
   ttl:
     category: 3600000
     product-detail: 1800000
     user-session: 86400000
     hot-products: 300000
 
-logging:
-  level:
-    com.example.backend.controller: DEBUG
-    org.springframework.web: DEBUG
-    com.example.backend.mapper: DEBUG
+spring:
+  websocket:
+    max-text-message-buffer-size: 81920 # 80KB缓冲区
+    max-binary-message-buffer-size: 81920
+
+chat:
+  websocket:
+    heartbeat-interval-ms: 30000  # 30秒心跳间隔
+    heartbeat-timeout-ms: 90000  # 90秒心跳超时
+    message-ack-timeout-ms: 30000  # 30秒消息ACK超时
+    max-retry-count: 3  # 最大重试次数
+    connection-limit:
+      per-instance: 5000  # 单实例最大连接数
+      per-user: 10  # 单用户最大连接数
+
+  inventory:
+    reserve-timeout-seconds: 300  # 预扣库存超时时间（5分钟）
+    sync-interval-seconds: 60  # 库存同步间隔（1分钟）
+
+monitoring:
+  websocket:
+    enabled: true
+    metrics-endpoint: "/admin/websocket/metrics"
+    health-endpoint: "/admin/websocket/health"
+    alert-thresholds:
+      connections: 80  # 连接数超过80%告警
+      error-rate: 5.0  # 错误率超过5%告警
